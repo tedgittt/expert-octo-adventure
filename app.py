@@ -1,103 +1,120 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import json
-import re
+import io
 
-# Page Configuration
-st.set_page_config(page_title="Notorious AI | Analyzer", layout="centered")
+# --- PAGE CONFIG ---
+st.set_page_config(
+    page_title="Notorious AI Chartalyzer",
+    page_icon="📈",
+    layout="centered"
+)
 
-# Custom CSS for Modern Glassmorphism
+# --- CUSTOM NEON DARK THEME ---
 st.markdown("""
     <style>
-    .main { background: #0e1117; color: white; }
-    .stMetric { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 15px; border: 1px solid rgba(255, 255, 255, 0.1); }
-    .stButton>button { 
-        width: 100%; 
-        border-radius: 12px; 
-        background: linear-gradient(90deg, #1e40af, #4338ca); 
-        color: white; 
-        border: none; 
-        padding: 12px; 
-        font-weight: bold; 
-        transition: 0.3s; 
+    .stApp { background-color: #050505; color: #e0e0e0; }
+    .stButton>button {
+        width: 100%;
+        background: linear-gradient(90deg, #00ff88 0%, #00bd65 100%);
+        color: black !important;
+        font-weight: bold;
+        border: none;
+        padding: 12px;
+        border-radius: 8px;
+        transition: 0.3s;
     }
-    .stButton>button:hover { 
-        background: linear-gradient(90deg, #2563eb, #4f46e5); 
-        transform: scale(1.02); 
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 15px #00ff88; }
+    .signal-card {
+        padding: 25px;
+        border-radius: 15px;
+        border: 1px solid #00ff88;
+        background-color: #0f1116;
+        box-shadow: 5px 5px 20px rgba(0,0,0,0.5);
     }
+    .stTextInput>div>div>input { background-color: #1a1c23; color: white; border: 1px solid #333; }
+    h1, h2, h3 { color: #00ff88 !important; font-family: 'Courier New', monospace; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏴 NOTORIOUS AI")
-st.caption("Universal Chart Analyzer - Crypto, Forex, Gold & Stocks")
+# --- SIDEBAR & AUTH ---
+with st.sidebar:
+    st.title("🛡️ ACCESS CONTROL")
+    st.markdown("Enter your **Gemini API Key** to power the analysis.")
+    api_key_input = st.text_input("API Key:", type="password", placeholder="AIzaSy...")
+    st.info("No key? Get one for free at [Google AI Studio](https://aistudio.google.com/)")
+    st.divider()
+    st.markdown("### 🛠️ CONFIGURATION")
+    st.caption("Model: Gemini 1.5 Flash (Ultra-Fast)")
 
-# API Configuration
-API_KEY = "AIzaSyBZtoAMlijbBkCBwMHB2e3PFuJtF3cmTpo"
-MODEL_NAME = 'gemini-1.5-flash-latest'
+# --- MAIN INTERFACE ---
+st.title("🤖 NOTORIOUS AI")
+st.markdown("### *Scalp Trading Chartalyzer*")
+st.write("---")
 
-uploaded_file = st.file_uploader("Upload Chart Screenshot", type=['png', 'jpg', 'jpeg'])
+# Instructions
+with st.expander("📖 HOW TO USE (READ FIRST)"):
+    st.markdown("""
+    1. **Setup:** Enter your Gemini API Key in the sidebar.
+    2. **Screenshot:** Capture your chart (TradingView/MT4/MT5). 
+    3. **Indicators:** For best results, include RSI, Bollinger Bands, or Volume.
+    4. **Upload:** Drag & Drop the image here.
+    5. **Analyze:** Click the button and wait for the AI logic.
+    """)
 
-if st.button("GENERATE SCALP SIGNAL"):
-    if not uploaded_file:
-        st.error("Please upload a chart image first!")
+# Layout
+col1, col2 = st.columns(2)
+
+with col1:
+    trade_mode = st.selectbox("Trading Instrument:", ["Binary Options (Fixed Time)", "CFD (Forex/Crypto)"])
+    uploaded_file = st.file_uploader("Upload Chart Screenshot", type=["jpg", "png", "jpeg"])
+
+with col2:
+    if uploaded_file:
+        st.image(uploaded_file, caption="Target Chart", use_container_width=True)
+
+# --- LOGIC ENGINE ---
+if st.button("EXECUTE CHART ANALYSIS"):
+    if not api_key_input:
+        st.error("❌ Error: Please enter an API Key in the sidebar!")
+    elif not uploaded_file:
+        st.warning("⚠️ Warning: Please upload a chart image first.")
     else:
         try:
-            genai.configure(api_key=API_KEY)
-            model = genai.GenerativeModel(MODEL_NAME)
+            genai.configure(api_key=api_key_input)
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
+            # Prepare image
             img = Image.open(uploaded_file)
             
-            with st.spinner('Analyzing market structure...'):
-                prompt = """
-                Analyze this chart deeply for a scalping strategy.
-                Detect market structure (BOS/CHoCH), supply/demand zones, or any visible indicators.
-                The asset can be anything (Crypto, Forex, Stocks, etc.).
-                Provide the output in pure JSON format:
-                {
-                    "asset": "Asset Name",
-                    "signal": "BUY or SELL or WAIT",
-                    "entry": "Entry Price Range",
-                    "tp": "Take Profit Target",
-                    "sl": "Stop Loss Level",
-                    "confidence": "Number %",
-                    "reason": "Short technical analysis in English"
-                }
-                """
-                
+            # Prompt Construction
+            prompt = f"""
+            You are 'Notorious AI Chartalyzer', a high-stakes professional trader.
+            Analyze this {trade_mode} chart. 
+            
+            Required Format:
+            ---
+            ## 🎯 SIGNAL: [BUY/SELL/NEUTRAL]
+            - **Confidence Score:** [0-100]%
+            - **Target/Expiry:** [Price or Time]
+            - **Risk Level:** [Low/Medium/High]
+            ---
+            ### 🔍 TECHNICAL LOGIC:
+            - Candlestick Analysis: [Brief observation]
+            - Indicator Reading: [RSI/Volume/Trends]
+            - Market Structure: [S/R levels detected]
+            
+            *Always provide a clear disclaimer that trading is risky.*
+            """
+
+            with st.spinner("🧠 Notorious AI is scanning market structure..."):
                 response = model.generate_content([prompt, img])
                 
-                # Robust JSON extraction
-                raw_text = response.text
-                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                
-                if match:
-                    json_data = match.group(0)
-                    data = json.loads(json_data)
-                    
-                    st.divider()
-                    
-                    # Result Header Logic
-                    sig = data['signal'].upper()
-                    color = "#22c55e" if sig == "BUY" else "#ef4444"
-                    if sig == "WAIT": color = "#eab308"
-                    
-                    st.markdown(f"<h1 style='text-align: center; color: {color};'>{sig} {data['asset']}</h1>", unsafe_allow_html=True)
-                    
-                    # Metric Rows
-                    col1, col2, col3 = st.columns(3)
-                    with col1: st.metric("ENTRY", data['entry'])
-                    with col2: st.metric("TAKE PROFIT", data['tp'])
-                    with col3: st.metric("STOP LOSS", data['sl'])
-                    
-                    # Additional Details
-                    st.info(f"**Analysis:** {data['reason']}")
-                    st.warning(f"**Confidence Level:** {data['confidence']}")
-                    
-                else:
-                    st.error("AI returned an invalid format. Please try again.")
-                    
+            st.markdown(f'<div class="signal-card">{response.text}</div>', unsafe_allow_html=True)
+            
         except Exception as e:
-            st.error(f"Execution Error: {e}")
+            st.error(f"Analysis failed: {str(e)}")
 
-st.markdown("<br><hr><center><small>Notorious AI © 2026 | Financial markets carry risk. Use for educational purposes only.</small></center>", unsafe_allow_html=True)
+# --- FOOTER ---
+st.write("---")
+st.caption("Powered by Gemini 1.5 Flash Vision Engine | Created for the Notorious Trading Community")
